@@ -1,6 +1,7 @@
 import os
 import time
 import json
+import re
 import requests
 from flask import Flask, render_template, jsonify
 from pathlib import Path
@@ -49,42 +50,60 @@ playlist = [
 # -------------------------------
 # Fetch Shorts from YouTube API
 # -------------------------------
+def parse_duration(iso_duration):
+    match = re.match(r'PT(?:(\d+)M)?(?:(\d+)S)?', iso_duration)
+    minutes = int(match.group(1)) if match.group(1) else 0
+    seconds = int(match.group(2)) if match.group(2) else 0
+    return minutes * 60 + seconds
+
 def fetch_shorts():
-    url = 'https://www.googleapis.com/youtube/v3/search'
-    params = {
-        'part': 'snippet',
-        'channelId': 'UC6z2c9KlWpPg5Nq5iIGpH0w',
-        'maxResults': 9,
+    search_url = 'https://www.googleapis.com/youtube/v3/search'
+    search_params = {
+        'part': 'id',
+        'channelId': YT_CHANNEL_ID,
+        'maxResults': 15,
         'order': 'date',
         'type': 'video',
-        'q': '#shorts',
-        'key': 'AIzaSyA1Q5vWr5DHOO_9_R8XxH8lQhtVbFxMqjs'
+        'key': YT_API_KEY
     }
 
-    r = requests.get(url, params=params, timeout=10)
+    r = requests.get(search_url, params=search_params, timeout=10)
     if not r.ok:
-        print("❌ YouTube API Error:", r.text)
+        print("❌ Search API Error:", r.text)
+        return []
+
+    video_ids = [item['id']['videoId'] for item in r.json().get('items', []) if 'videoId' in item['id']]
+    if not video_ids:
+        return []
+
+    details_url = 'https://www.googleapis.com/youtube/v3/videos'
+    details_params = {
+        'part': 'snippet,contentDetails',
+        'id': ','.join(video_ids),
+        'key': YT_API_KEY
+    }
+
+    r2 = requests.get(details_url, params=details_params, timeout=10)
+    if not r2.ok:
+        print("❌ Videos API Error:", r2.text)
         return []
 
     items = []
-    for it in r.json().get('items', []):
-        vid = it['id'].get('videoId')
-        sn = it.get('snippet', {})
-        thumb = (sn.get('thumbnails') or {}).get('high', {}).get('url') or (sn.get('thumbnails') or {}).get('default', {}).get('url')
-        items.append({
-            'title': sn.get('title'),
-            'videoId': vid,
-            'thumbnail': thumb,
-            'publishedAt': sn.get('publishedAt')
-        })
+    for item in r2.json().get('items', []):
+        duration = item['contentDetails']['duration']
+        seconds = parse_duration(duration)
+        if seconds <= 60:
+            sn = item['snippet']
+            thumb = sn.get('thumbnails', {}).get('high', {}).get('url') or sn.get('thumbnails', {}).get('default', {}).get('url')
+            items.append({
+                'title': sn.get('title'),
+                'videoId': item['id'],
+                'thumbnail': thumb,
+                'publishedAt': sn.get('publishedAt')
+            })
     print(f"✅ Found {len(items)} shorts.")
     return items
 
-
-
-# -------------------------------
-# Cache logic to reduce API calls
-# -------------------------------
 def get_shorts():
     now = time.time()
     if CACHE.exists():
@@ -101,27 +120,14 @@ def get_shorts():
         print("Cache write error:", e)
     return items
 
-
-# -------------------------------
-# Flask routes
-# -------------------------------
 @app.route("/")
 def home():
     shorts = get_shorts()
     return render_template("index.html", songs=playlist, shorts=shorts)
 
-
 @app.route("/api/shorts")
 def api_shorts():
     return jsonify({"items": get_shorts()})
 
-
-# -------------------------------
-# Run server
-# -------------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080, debug=True)
-
-# Vercel requires this (don’t remove)
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080)
