@@ -9,7 +9,7 @@ app = Flask(__name__)
 
 # --- API Key and Channel ID ---
 YT_API_KEY = "AIzaSyA1Q5vWr5DHOO_9_R8XxH8lQhtVbFxMqjs"
-YT_CHANNEL_ID = "UC6z2c9KlWpPg5Nq5iIGpH0"
+YT_CHANNEL_ID = "UC6z2c9KlWpPg5Nq5iIGpH0w"
 
 # --- Cache and refresh settings ---
 CACHE = Path('shorts_cache.json')
@@ -53,7 +53,7 @@ def fetch_shorts():
     url = 'https://www.googleapis.com/youtube/v3/search'
     params = {
         'part': 'snippet',
-        'channelId': 'UC6z2c9KlWpPg5Nq5iIGpH0',
+        'channelId': 'UC6z2c9KlWpPg5Nq5iIGpH0w',
         'maxResults': 9,
         'order': 'date',
         'type': 'video',
